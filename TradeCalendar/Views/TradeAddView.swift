@@ -34,7 +34,7 @@ struct TradeAddView: View {
                     HStack {
                         Text("損益（自動）")
                         Spacer()
-                        Text("\(Int(profit))")
+                        Text(NumberFormatters.yen(profit))
                             .foregroundStyle(profit >= 0 ? .green : .red)
                     }
                 }
@@ -68,4 +68,3 @@ struct TradeAddView: View {
         }
     }
 }
-

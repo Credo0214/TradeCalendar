@@ -5,10 +5,7 @@ struct TradeEditView: View {
     @Environment(\.dismiss) private var dismiss
 
     let trade: TradeEntity
-
-    // 保存
     let onSave: (TradeEntity, String, Double, Double, Date, String?) -> Void
-    // 削除
     let onDelete: (TradeEntity) -> Void
 
     @State private var pair: String = ""
@@ -41,7 +38,7 @@ struct TradeEditView: View {
                     HStack {
                         Text("損益（自動）")
                         Spacer()
-                        Text("\(profit, specifier: "%.2f")")
+                        Text(NumberFormatters.yen(profit))
                             .foregroundStyle(profit >= 0 ? .green : .red)
                     }
                 }
@@ -76,7 +73,6 @@ struct TradeEditView: View {
                         dismiss()
                     }
                 }
-
                 ToolbarItem(placement: .cancellationAction) {
                     Button("キャンセル") { dismiss() }
                 }
@@ -102,3 +98,4 @@ struct TradeEditView: View {
         }
     }
 }
+

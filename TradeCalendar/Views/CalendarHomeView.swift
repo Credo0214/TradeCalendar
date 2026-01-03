@@ -11,6 +11,8 @@ struct CalendarHomeView: View {
 
     @State private var editingTrade: TradeEntity?
     @State private var showEditTrade = false
+    
+    @State private var showDailySummary = false
 
     private let calendar = Calendar.current
     private let columns = Array(repeating: GridItem(.flexible()), count: 7)
@@ -70,12 +72,19 @@ struct CalendarHomeView: View {
                                         .font(.headline)
 
                                     if profitForDay != 0 {
-                                        Text("\(profitForDay, specifier: "%.0f")")
+                                        // 見た目を優先するならバッジは数値のみでもOKだが、統一のため¥表示
+                                        Text(NumberFormatters.yenCompact(profitForDay))
                                             .font(.caption2)
                                             .foregroundStyle(.white)
+                                            .lineLimit(1)                 // ★ 改行禁止
+                                            .minimumScaleFactor(0.7)      // ★ どうしても長い時は縮小
                                             .padding(.horizontal, 6)
                                             .padding(.vertical, 2)
-                                            .background(profitForDay > 0 ? Color.green : Color.red)
+                                            .background(
+                                                (profitForDay > 0 ? Color.green : Color.red)
+                                                    .frame(maxWidth: 60)   // ← これ以上広がらない
+                                            )
+
                                             .clipShape(Capsule())
                                     }
                                 }
@@ -113,7 +122,7 @@ struct CalendarHomeView: View {
                             HStack {
                                 Text(trade.memo ?? (trade.pair ?? ""))
                                 Spacer()
-                                Text("\(Int(trade.profit))")
+                                Text(NumberFormatters.yen(trade.profit))
                                     .foregroundStyle(trade.profit >= 0 ? .green : .red)
                             }
                             .contentShape(Rectangle())
@@ -127,9 +136,10 @@ struct CalendarHomeView: View {
 
                 Spacer()
 
-                Text("当月合計損益：\(Int(viewModel.monthlyTotal))円")
+                // 月合計（¥ + 桁区切り）
+                Text("当月合計損益：\(NumberFormatters.yen(viewModel.monthlyTotal))")
                     .font(.headline)
-                    .foregroundStyle(.green)
+                    .foregroundStyle(viewModel.monthlyTotal >= 0 ? .green : .red)
 
                 Button {
                     showAddTrade = true
@@ -158,7 +168,7 @@ struct CalendarHomeView: View {
                 }
             }
 
-            // 編集 + 削除（dynamicMember 回避で vm に逃がす）
+            // 編集 + 削除（dynamicMember 回避）
             .sheet(isPresented: $showEditTrade) {
                 let vm = viewModel
                 if let trade = editingTrade {

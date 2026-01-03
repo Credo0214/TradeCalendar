@@ -18,3 +18,22 @@ enum NumberFormatters {
     }
 }
 
+extension NumberFormatters {
+
+    /// カレンダー用：短縮表示（例：¥12.5K / ¥1.2M）
+    static func yenCompact(_ value: Double) -> String {
+        let absValue = abs(value)
+
+        let formatted: String
+        switch absValue {
+        case 1_000_000...:
+            formatted = String(format: "%.1fM", absValue / 1_000_000)
+        case 10_000...:
+            formatted = String(format: "%.1fK", absValue / 1_000)
+        default:
+            formatted = String(Int(absValue))
+        }
+
+        return value < 0 ? "-¥\(formatted)" : "¥\(formatted)"
+    }
+}
