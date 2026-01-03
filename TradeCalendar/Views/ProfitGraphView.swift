@@ -118,13 +118,20 @@ struct ProfitGraphView: View {
             .applyXDomain(vm.xDomain)
             .chartOverlay { proxy in
                 GeometryReader { geo in
-                    Rectangle().fill(.clear).contentShape(Rectangle())
+                    Rectangle()
+                        .fill(.clear)
+                        .contentShape(Rectangle())
                         .gesture(
                             DragGesture(minimumDistance: 0)
                                 .onChanged { value in
-                                    let origin = geo[proxy.plotAreaFrame].origin
-                                    let xPos = value.location.x - origin.x
-                                    let date: Date? = proxy.value(atX: xPos)
+                                    guard let plotFrame = proxy.plotFrame else {
+                                        return
+                                    }
+
+                                    let origin = geo[plotFrame].origin
+                                    let locationX = value.location.x - origin.x
+
+                                    let date: Date? = proxy.value(atX: locationX)
                                     vm.selectNearest(to: date)
                                 }
                         )

@@ -17,15 +17,16 @@ struct SettingView: View {
                             .multilineTextAlignment(.trailing)
                             .frame(minWidth: 80)
                             .focused($isRiskFocused)
-                            .onChange(of: isRiskFocused) { focused in
-                                if !focused {
+                            .onChange(of: isRiskFocused) {
+                                if !isRiskFocused {
                                     settingsStore.saveRiskRateIfValid()
                                 }
                             }
+
                     }
 
-                    if let message = settingsStore.validationMessage {
-                        Text(message)
+                    if let msg = settingsStore.validationMessage {
+                        Text(msg)
                             .font(.footnote)
                             .foregroundStyle(.red)
                     }

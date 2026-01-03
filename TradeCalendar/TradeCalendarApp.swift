@@ -12,7 +12,7 @@ struct TradeCalendarApp: App {
         let ctx = PersistenceController.shared.container.viewContext
         _settingsStore = StateObject(wrappedValue: AppSettingsStore(context: ctx))
 
-        // TabBar：選択=青、未選択=グレー（統一感と視認性）
+        // TabBar: 選択=AppBlue, 未選択=グレー
         let appearance = UITabBarAppearance()
         appearance.configureWithDefaultBackground()
 
@@ -33,7 +33,7 @@ struct TradeCalendarApp: App {
             RootTabView(context: persistenceController.container.viewContext)
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
                 .environmentObject(settingsStore)
-                .tint(Color("AppBlue")) // アプリの操作色は青に統一
+                .tint(Color("AppBlue"))
         }
     }
 }

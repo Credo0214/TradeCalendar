@@ -20,17 +20,24 @@ struct TradeAddView: View {
         case pair, balanceBefore, balanceAfter, memo
     }
 
-    private var profit: Double {
-        (Double(balanceAfter) ?? 0) - (Double(balanceBefore) ?? 0)
+    private var beforeValue: Double { Double(balanceBefore) ?? 0 }
+    private var afterValue: Double { Double(balanceAfter) ?? 0 }
+
+    private var profitValue: Double {
+        RiskCalculator.profit(balanceBefore: beforeValue, balanceAfter: afterValue)
     }
 
-    private var allowedLoss: Double {
-        let balance = Double(balanceBefore) ?? 0
-        return balance * (riskPercent / 100.0)
+    private var oneR: RiskAmount {
+        RiskCalculator.oneR(balance: beforeValue, rate: RiskRate(percent: riskPercent))
     }
 
-    private var profit2R: Double { allowedLoss * 2 }
-    private var profit3R: Double { allowedLoss * 3 }
+    private var twoR: TargetAmount {
+        RiskCalculator.nR(balance: beforeValue, rate: RiskRate(percent: riskPercent), multiple: 2)
+    }
+
+    private var threeR: TargetAmount {
+        RiskCalculator.nR(balance: beforeValue, rate: RiskRate(percent: riskPercent), multiple: 3)
+    }
 
     var body: some View {
         NavigationStack {
@@ -53,14 +60,14 @@ struct TradeAddView: View {
                     HStack {
                         Text("損益（自動）")
                         Spacer()
-                        Text(NumberFormatters.yen(profit))
-                            .foregroundStyle(profit >= 0 ? Color("AppBlue") : .red)
+                        Text(NumberFormatters.yen(profitValue))
+                            .foregroundStyle(profitValue >= 0 ? Color("AppBlue") : .red)
                     }
 
                     HStack {
                         Text("許容損失額（1R）")
                         Spacer()
-                        Text(NumberFormatters.yen(allowedLoss))
+                        Text(NumberFormatters.yen(oneR.value))
                             .monospacedDigit()
                             .foregroundStyle(.red)
                     }
@@ -68,7 +75,7 @@ struct TradeAddView: View {
                     HStack {
                         Text("2R（目標①）")
                         Spacer()
-                        Text(NumberFormatters.yen(profit2R))
+                        Text(NumberFormatters.yen(twoR.value))
                             .monospacedDigit()
                             .foregroundStyle(.secondary)
                     }
@@ -76,7 +83,7 @@ struct TradeAddView: View {
                     HStack {
                         Text("3R（目標②）")
                         Spacer()
-                        Text(NumberFormatters.yen(profit3R))
+                        Text(NumberFormatters.yen(threeR.value))
                             .monospacedDigit()
                             .foregroundStyle(.secondary)
                     }

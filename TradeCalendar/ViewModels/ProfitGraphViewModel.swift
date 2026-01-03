@@ -5,27 +5,38 @@ import Combine
 @MainActor
 final class ProfitGraphViewModel: ObservableObject {
 
+    // MARK: - Published (Output)
+
     @Published private(set) var dailyPoints: [DailyProfitPoint] = []
     @Published private(set) var cumulativePoints: [CumulativeProfitPoint] = []
 
-    // X軸ドメイン（最新日を右端に寄せるため、右に1日パディング）
+    /// X軸ドメイン（最新日を右端に寄せるため、右に1日パディング）
     @Published private(set) var xDomain: ClosedRange<Date>?
 
-    // 最大DD
+    /// 最大DD
     @Published private(set) var maxDrawdown: MaxDrawdownInfo?
 
-    // タップ選択
+    /// タップ選択
     @Published private(set) var selection: GraphSelection?
+
+    // MARK: - Published (Input)
 
     @Published var selectedRange: ProfitGraphRange = .oneMonth {
         didSet {
-            Task { @MainActor in self.reload() }
+            // 外部からの変更経路を安全側で吸収
+            Task { @MainActor in
+                self.reload()
+            }
         }
     }
+
+    // MARK: - Dependencies / Internal
 
     private var context: NSManagedObjectContext
     private let calendar: Calendar
     private var contextObserver: NSObjectProtocol?
+
+    // MARK: - Init / Deinit
 
     init(context: NSManagedObjectContext, calendar: Calendar = .current) {
         self.context = context
@@ -40,6 +51,8 @@ final class ProfitGraphViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Public API
+
     func replaceContextIfNeeded(_ newContext: NSManagedObjectContext) {
         if context === newContext { return }
         context = newContext
@@ -47,18 +60,24 @@ final class ProfitGraphViewModel: ObservableObject {
         reload()
     }
 
+    /// データ再構築（期間フィルタを含む）
     func reload(now: Date = Date()) {
         let request = NSFetchRequest<TradeEntity>(entityName: "TradeEntity")
         request.sortDescriptors = [NSSortDescriptor(key: "date", ascending: true)]
 
         if let range = makeDateInterval(now: now) {
-            request.predicate = NSPredicate(format: "date >= %@ AND date < %@", range.start as NSDate, range.end as NSDate)
+            request.predicate = NSPredicate(
+                format: "date >= %@ AND date < %@",
+                range.start as NSDate,
+                range.end as NSDate
+            )
         }
 
         do {
             let trades = try context.fetch(request)
             rebuildPoints(from: trades)
         } catch {
+            // 最小安全動作：落とさずクリア
             dailyPoints = []
             cumulativePoints = []
             xDomain = nil
@@ -67,21 +86,18 @@ final class ProfitGraphViewModel: ObservableObject {
         }
     }
 
-    // タップされた日付に最も近い日次点を選択（累積/日次を同期）
+    /// タップされた日付に最も近い日次点を選択（累積/日次を同期）
     func selectNearest(to date: Date?) {
         guard let date else { return }
         guard !dailyPoints.isEmpty else { return }
 
         let targetDay = calendar.startOfDay(for: date)
 
-        // 近い日付を探す（startOfDay同士で比較）
         let nearest = dailyPoints.min { a, b in
             abs(a.date.timeIntervalSince(targetDay)) < abs(b.date.timeIntervalSince(targetDay))
         }
-
         guard let nearest else { return }
 
-        // 累積は同じdateの点を探す（無ければ日次から計算済みの cumulativePoints の近傍）
         let cum = cumulativePoints.first(where: { $0.date == nearest.date })?.cumulativeProfit
             ?? cumulativePoints.min { a, b in
                 abs(a.date.timeIntervalSince(nearest.date)) < abs(b.date.timeIntervalSince(nearest.date))
@@ -95,7 +111,7 @@ final class ProfitGraphViewModel: ObservableObject {
         selection = nil
     }
 
-    // MARK: - Private
+    // MARK: - Context Observe
 
     private func bindContextChanges() {
         if let contextObserver {
@@ -113,6 +129,8 @@ final class ProfitGraphViewModel: ObservableObject {
             }
         }
     }
+
+    // MARK: - Build Points
 
     private func rebuildPoints(from trades: [TradeEntity]) {
         // date nil は除外
@@ -157,6 +175,8 @@ final class ProfitGraphViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Max Drawdown
+
     private func computeMaxDrawdown(from points: [CumulativeProfitPoint]) -> MaxDrawdownInfo? {
         guard points.count >= 2 else { return nil }
 
@@ -196,6 +216,8 @@ final class ProfitGraphViewModel: ObservableObject {
         return best
     }
 
+    // MARK: - Date Interval
+
     private func makeDateInterval(now: Date) -> DateInterval? {
         let end = now
         let startThisMonth = calendar.startOfMonth(for: now)
@@ -224,3 +246,4 @@ final class ProfitGraphViewModel: ObservableObject {
         }
     }
 }
+

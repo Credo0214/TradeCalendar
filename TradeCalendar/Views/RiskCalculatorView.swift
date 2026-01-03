@@ -1,46 +1,70 @@
 import SwiftUI
 
 struct RiskCalculatorView: View {
-    @Environment(\.managedObjectContext) private var context
-    @StateObject private var viewModel = RiskCalculatorViewModel()
 
-    private enum Field { case balance, risk }
-    @FocusState private var focused: Field?
+    @StateObject private var vm = RiskCalculatorViewModel()
+    @EnvironmentObject private var settingsStore: AppSettingsStore
+
+    @FocusState private var focusedField: Field?
+
+    private enum Field: Hashable {
+        case balance
+        case risk
+    }
 
     var body: some View {
-        Form {
-            Section("入力") {
-                TextField("資金（JPY）", text: $viewModel.balanceText)
-                    .keyboardType(.decimalPad)
-                    .focused($focused, equals: .balance)
+        NavigationStack {
+            Form {
+                Section("入力") {
+                    TextField("資金", text: $vm.balanceText)
+                        .keyboardType(.decimalPad)
+                        .focused($focusedField, equals: .balance)
 
-                TextField("リスク（%）", text: $viewModel.riskPercentText)
-                    .keyboardType(.decimalPad)
-                    .focused($focused, equals: .risk)
+                    TextField("リスク率（%）", text: $vm.riskPercentText)
+                        .keyboardType(.decimalPad)
+                        .focused($focusedField, equals: .risk)
+                }
 
-                if let msg = viewModel.validationMessage {
-                    Text(msg).foregroundStyle(.secondary)
+                Section("出力") {
+                    row(title: "許容損失額（1R）", value: vm.oneRText, isRisk: true)
+                    row(title: "2R（目標①）", value: vm.twoRText, isRisk: false)
+                    row(title: "3R（目標②）", value: vm.threeRText, isRisk: false)
                 }
             }
-
-            Section("結果") {
-                HStack {
-                    Text("許容損失額")
+            .navigationTitle("リスク計算")
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
-                    Text(viewModel.allowedLossText)
-                        .monospacedDigit()
+                    Button("Done") { focusedField = nil }
+                }
+            }
+            .onAppear {
+                // 設定のリスク率を初期値として反映（表示だけ）
+                // ※ ユーザーが入力していたら上書きしない
+                if vm.riskPercentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    vm.riskPercentText = formatRiskRate(settingsStore.riskRate)
                 }
             }
         }
-        .navigationTitle("リスク計算")
-        .task { viewModel.loadDefaults(context: context) }
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button("完了") { focused = nil }
+        .tint(Color("AppBlue"))
+    }
+
+    private func row(title: String, value: String, isRisk: Bool) -> some View {
+        HStack {
+            Text(title)
+            Spacer()
+            if value.isEmpty {
+                Text("—").foregroundStyle(.secondary)
+            } else {
+                Text(value)
+                    .monospacedDigit()
+                    .foregroundStyle(isRisk ? .red : .secondary)
             }
         }
-        .onTapGesture { focused = nil }
+    }
+
+    private func formatRiskRate(_ value: Double) -> String {
+        if value.rounded() == value { return String(Int(value)) }
+        return String(value)
     }
 }
-
