@@ -1,26 +1,63 @@
 import SwiftUI
 
-struct SettingsView: View {
-    @ObservedObject var viewModel: SettingsViewModel
+struct SettingView: View {
+
+    @EnvironmentObject private var settingsStore: AppSettingsStore
+    @FocusState private var isRiskFocused: Bool
 
     var body: some View {
-        Form {
-            Section("表示") {
-                Picker("テーマ", selection: $viewModel.theme) {
-                    Text("System").tag("system")
-                    Text("Light").tag("light")
-                    Text("Dark").tag("dark")
+        NavigationStack {
+            Form {
+                Section("リスク設定") {
+                    HStack {
+                        Text("リスク率（%）")
+                        Spacer()
+                        TextField("例: 5", text: $settingsStore.riskRateText)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(minWidth: 80)
+                            .focused($isRiskFocused)
+                            .onChange(of: isRiskFocused) { focused in
+                                if !focused {
+                                    settingsStore.saveRiskRateIfValid()
+                                }
+                            }
+                    }
+
+                    if let message = settingsStore.validationMessage {
+                        Text(message)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
+                }
+
+                Section("表示") {
+                    Picker(
+                        "テーマ",
+                        selection: Binding(
+                            get: { settingsStore.appearanceMode },
+                            set: { settingsStore.setAppearanceMode($0) }
+                        )
+                    ) {
+                        ForEach(AppSettingsStore.AppearanceMode.allCases) { mode in
+                            Text(mode.title).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .tint(Color("AppBlue"))
                 }
             }
-
-            Section("リスク") {
-                TextField("許容損失率", value: $viewModel.riskRate, format: .number)
-                    .keyboardType(.decimalPad)
+            .navigationTitle("設定")
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") {
+                        settingsStore.saveRiskRateIfValid()
+                        isRiskFocused = false
+                    }
+                }
             }
         }
-        .navigationTitle("設定")
-        .onChange(of: viewModel.theme) { _, _ in viewModel.save() }
-        .onChange(of: viewModel.riskRate) { _, _ in viewModel.save() }
+        .tint(Color("AppBlue"))
     }
 }
-

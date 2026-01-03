@@ -71,6 +71,14 @@ final class CalendarViewModel: ObservableObject {
 
         saveAndRefresh()
     }
+    /// 直近トレード後の総資金（なければ 0）
+    var latestTotalBalance: Double {
+        trades
+            .sorted { ($0.date ?? .distantPast) < ($1.date ?? .distantPast) }
+            .last?
+            .balanceAfter ?? 0
+    }
+
 
     // MARK: - Update (編集)
 

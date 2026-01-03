@@ -2,42 +2,225 @@ import Foundation
 import CoreData
 import Combine
 
+@MainActor
 final class ProfitGraphViewModel: ObservableObject {
 
-    @Published var dailyTotals: [(date: Date, profit: Double)] = []
+    @Published private(set) var dailyPoints: [DailyProfitPoint] = []
+    @Published private(set) var cumulativePoints: [CumulativeProfitPoint] = []
 
-    private let context: NSManagedObjectContext
-    private let calendar = Calendar.current
+    // X軸ドメイン（最新日を右端に寄せるため、右に1日パディング）
+    @Published private(set) var xDomain: ClosedRange<Date>?
 
-    init(context: NSManagedObjectContext) {
-        self.context = context
-        fetch()
+    // 最大DD
+    @Published private(set) var maxDrawdown: MaxDrawdownInfo?
+
+    // タップ選択
+    @Published private(set) var selection: GraphSelection?
+
+    @Published var selectedRange: ProfitGraphRange = .oneMonth {
+        didSet {
+            Task { @MainActor in self.reload() }
+        }
     }
 
-    // MARK: - Fetch & Aggregate
+    private var context: NSManagedObjectContext
+    private let calendar: Calendar
+    private var contextObserver: NSObjectProtocol?
 
-    func fetch() {
-        let request = TradeEntity.fetchRequest()
-        request.sortDescriptors = [
-            NSSortDescriptor(keyPath: \TradeEntity.date, ascending: true)
-        ]
+    init(context: NSManagedObjectContext, calendar: Calendar = .current) {
+        self.context = context
+        self.calendar = calendar
+        bindContextChanges()
+        reload()
+    }
 
-        let trades = (try? context.fetch(request)) ?? []
+    deinit {
+        if let contextObserver {
+            NotificationCenter.default.removeObserver(contextObserver)
+        }
+    }
 
-        // date が nil のものを安全に除外
-        let validTrades: [(date: Date, profit: Double)] = trades.compactMap { trade in
-            guard let date = trade.date else { return nil }
-            return (date: calendar.startOfDay(for: date), profit: trade.profit)
+    func replaceContextIfNeeded(_ newContext: NSManagedObjectContext) {
+        if context === newContext { return }
+        context = newContext
+        bindContextChanges()
+        reload()
+    }
+
+    func reload(now: Date = Date()) {
+        let request = NSFetchRequest<TradeEntity>(entityName: "TradeEntity")
+        request.sortDescriptors = [NSSortDescriptor(key: "date", ascending: true)]
+
+        if let range = makeDateInterval(now: now) {
+            request.predicate = NSPredicate(format: "date >= %@ AND date < %@", range.start as NSDate, range.end as NSDate)
         }
 
-        let grouped = Dictionary(grouping: validTrades) { $0.date }
+        do {
+            let trades = try context.fetch(request)
+            rebuildPoints(from: trades)
+        } catch {
+            dailyPoints = []
+            cumulativePoints = []
+            xDomain = nil
+            maxDrawdown = nil
+            selection = nil
+        }
+    }
 
-        dailyTotals = grouped
-            .map { (date, items) in
-                let total = items.reduce(0) { $0 + $1.profit }
-                return (date: date, profit: total)
+    // タップされた日付に最も近い日次点を選択（累積/日次を同期）
+    func selectNearest(to date: Date?) {
+        guard let date else { return }
+        guard !dailyPoints.isEmpty else { return }
+
+        let targetDay = calendar.startOfDay(for: date)
+
+        // 近い日付を探す（startOfDay同士で比較）
+        let nearest = dailyPoints.min { a, b in
+            abs(a.date.timeIntervalSince(targetDay)) < abs(b.date.timeIntervalSince(targetDay))
+        }
+
+        guard let nearest else { return }
+
+        // 累積は同じdateの点を探す（無ければ日次から計算済みの cumulativePoints の近傍）
+        let cum = cumulativePoints.first(where: { $0.date == nearest.date })?.cumulativeProfit
+            ?? cumulativePoints.min { a, b in
+                abs(a.date.timeIntervalSince(nearest.date)) < abs(b.date.timeIntervalSince(nearest.date))
+            }?.cumulativeProfit
+            ?? 0
+
+        selection = GraphSelection(date: nearest.date, dailyProfit: nearest.profit, cumulativeProfit: cum)
+    }
+
+    func clearSelection() {
+        selection = nil
+    }
+
+    // MARK: - Private
+
+    private func bindContextChanges() {
+        if let contextObserver {
+            NotificationCenter.default.removeObserver(contextObserver)
+        }
+
+        contextObserver = NotificationCenter.default.addObserver(
+            forName: .NSManagedObjectContextObjectsDidChange,
+            object: context,
+            queue: nil
+        ) { [weak self] _ in
+            guard let self else { return }
+            Task { @MainActor in
+                self.reload()
+            }
+        }
+    }
+
+    private func rebuildPoints(from trades: [TradeEntity]) {
+        // date nil は除外
+        let valid: [(day: Date, profit: Double)] = trades.compactMap { t in
+            guard let d = t.date else { return nil }
+            return (calendar.startOfDay(for: d), t.profit)
+        }
+
+        // 日次合算
+        let grouped = Dictionary(grouping: valid, by: { $0.day })
+        let daily: [DailyProfitPoint] = grouped
+            .map { (day, items) in
+                let sum = items.reduce(0.0) { $0 + $1.profit }
+                return DailyProfitPoint(id: day, date: day, profit: sum)
             }
             .sorted { $0.date < $1.date }
+
+        dailyPoints = daily
+
+        // 累積（期間開始=0）
+        var running = 0.0
+        let cumulative: [CumulativeProfitPoint] = daily.map { p in
+            running += p.profit
+            return CumulativeProfitPoint(id: p.date, date: p.date, cumulativeProfit: running)
+        }
+        cumulativePoints = cumulative
+
+        // X軸ドメイン（右に1日パディングして最新を右端へ）
+        if let first = daily.first?.date, let last = daily.last?.date {
+            let end = calendar.date(byAdding: .day, value: 1, to: last) ?? last
+            xDomain = first...end
+        } else {
+            xDomain = nil
+        }
+
+        // 最大DD
+        maxDrawdown = computeMaxDrawdown(from: cumulative)
+
+        // 既存 selection が期間外になったらクリア
+        if let sel = selection, daily.first(where: { $0.date == sel.date }) == nil {
+            selection = nil
+        }
+    }
+
+    private func computeMaxDrawdown(from points: [CumulativeProfitPoint]) -> MaxDrawdownInfo? {
+        guard points.count >= 2 else { return nil }
+
+        var peakValue = points[0].cumulativeProfit
+        var peakDate = points[0].date
+
+        var best: MaxDrawdownInfo?
+
+        for p in points {
+            // 新高値なら peak 更新
+            if p.cumulativeProfit > peakValue {
+                peakValue = p.cumulativeProfit
+                peakDate = p.date
+                continue
+            }
+
+            let dd = p.cumulativeProfit - peakValue // 負
+            if let currentBest = best {
+                if dd < currentBest.drawdown {
+                    best = MaxDrawdownInfo(
+                        peakDate: peakDate,
+                        troughDate: p.date,
+                        peakValue: peakValue,
+                        troughValue: p.cumulativeProfit
+                    )
+                }
+            } else if dd < 0 {
+                best = MaxDrawdownInfo(
+                    peakDate: peakDate,
+                    troughDate: p.date,
+                    peakValue: peakValue,
+                    troughValue: p.cumulativeProfit
+                )
+            }
+        }
+
+        return best
+    }
+
+    private func makeDateInterval(now: Date) -> DateInterval? {
+        let end = now
+        let startThisMonth = calendar.startOfMonth(for: now)
+
+        switch selectedRange {
+        case .oneMonth:
+            return DateInterval(start: startThisMonth, end: end)
+
+        case .threeMonths:
+            let start = calendar.date(byAdding: .month, value: -2, to: startThisMonth) ?? startThisMonth
+            return DateInterval(start: start, end: end)
+
+        case .all:
+            let minReq = NSFetchRequest<TradeEntity>(entityName: "TradeEntity")
+            minReq.sortDescriptors = [NSSortDescriptor(key: "date", ascending: true)]
+            minReq.fetchLimit = 1
+
+            do {
+                let first = try context.fetch(minReq).first
+                guard let firstDate = first?.date else { return nil }
+                let start = calendar.startOfMonth(for: firstDate)
+                return DateInterval(start: start, end: end)
+            } catch {
+                return nil
+            }
+        }
     }
 }
-

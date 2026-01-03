@@ -1,21 +1,27 @@
 import SwiftUI
+import CoreData
 
 struct CalendarHomeView: View {
 
     @ObservedObject var viewModel: CalendarViewModel
+    @Environment(\.managedObjectContext) private var viewContext
 
     @State private var currentMonth: Date = Date()
     @State private var selectedDate: Date = Date()
 
     @State private var showAddTrade = false
-
     @State private var editingTrade: TradeEntity?
     @State private var showEditTrade = false
-
     @State private var showDailySummary = false
 
     private let calendar = Calendar.current
     private let columns = Array(repeating: GridItem(.flexible()), count: 7)
+
+    private var riskPercent: Double {
+        let request = NSFetchRequest<AppSettingsEntity>(entityName: "AppSettingsEntity")
+        request.fetchLimit = 1
+        return (try? viewContext.fetch(request).first?.riskRate) ?? 1.0
+    }
 
     var body: some View {
         NavigationStack {
@@ -25,7 +31,7 @@ struct CalendarHomeView: View {
                     .font(.largeTitle.bold())
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                // 月切替
+                // 月切替（色は tint=青に統一される）
                 HStack {
                     Button {
                         currentMonth = calendar.date(byAdding: .month, value: -1, to: currentMonth) ?? currentMonth
@@ -43,7 +49,7 @@ struct CalendarHomeView: View {
                     } label: { Image(systemName: "chevron.right") }
                 }
 
-                // 曜日（firstWeekday に合わせる）
+                // 曜日
                 HStack {
                     ForEach(weekdaySymbols, id: \.self) { s in
                         Text(s)
@@ -53,12 +59,12 @@ struct CalendarHomeView: View {
                     }
                 }
 
-                // カレンダー本体（空白セル込み）
+                // カレンダー
                 LazyVGrid(columns: columns, spacing: 12) {
                     ForEach(dayCellsInMonth) { cell in
                         if let day = cell.date {
-
-                            let profitForDay: Double = viewModel.dailyTotal(on: day)
+                            let profitForDay = viewModel.dailyTotal(on: day)
+                            let isSelected = calendar.isDate(day, inSameDayAs: selectedDate)
 
                             Button {
                                 selectedDate = day
@@ -67,26 +73,31 @@ struct CalendarHomeView: View {
                                 VStack(spacing: 4) {
                                     Text("\(calendar.component(.day, from: day))")
                                         .font(.headline)
+                                        .foregroundStyle(.primary)
 
                                     if profitForDay != 0 {
                                         Text(NumberFormatters.yenCompact(profitForDay))
                                             .font(.caption2)
                                             .foregroundStyle(.white)
-                                            .lineLimit(1)            // 改行禁止
-                                            .minimumScaleFactor(0.7) // 長い時は縮小
+                                            .lineLimit(1)
+                                            .minimumScaleFactor(0.7)
                                             .padding(.horizontal, 6)
                                             .padding(.vertical, 2)
-                                            .background(profitForDay > 0 ? Color.green : Color.red)
+                                            .background(profitForDay >= 0 ? Color("AppBlue") : Color.red)
                                             .clipShape(Capsule())
                                     }
                                 }
                                 .frame(maxWidth: .infinity, minHeight: 56)
                                 .background(
-                                    calendar.isDate(day, inSameDayAs: selectedDate)
-                                    ? Color.blue.opacity(0.25)
-                                    : Color(.systemGray5)
+                                    isSelected ? Color("AppBlue").opacity(0.22) : Color(.systemGray5)
                                 )
                                 .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .overlay {
+                                    if isSelected {
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(Color("AppBlue"), lineWidth: 2)
+                                    }
+                                }
                             }
                             .buttonStyle(.plain)
 
@@ -99,7 +110,7 @@ struct CalendarHomeView: View {
 
                 Divider()
 
-                // 選択日の履歴（リストは編集/削除の入口として残す）
+                // 選択日の履歴
                 VStack(alignment: .leading, spacing: 8) {
                     Text("選択日：\(selectedDate, format: .dateTime.year().month().day())")
                         .font(.headline)
@@ -115,7 +126,7 @@ struct CalendarHomeView: View {
                                 Text(trade.memo ?? (trade.pair ?? ""))
                                 Spacer()
                                 Text(NumberFormatters.yen(trade.profit))
-                                    .foregroundStyle(trade.profit >= 0 ? .green : .red)
+                                    .foregroundStyle(trade.profit >= 0 ? Color("AppBlue") : .red)
                             }
                             .contentShape(Rectangle())
                             .onTapGesture {
@@ -128,11 +139,12 @@ struct CalendarHomeView: View {
 
                 Spacer()
 
-                // 月合計（フル表示：¥ + 桁区切り）
+                // 当月合計（＋青、−赤）
                 Text("当月合計損益：\(NumberFormatters.yen(viewModel.monthlyTotal))")
                     .font(.headline)
-                    .foregroundStyle(viewModel.monthlyTotal >= 0 ? .green : .red)
+                    .foregroundStyle(viewModel.monthlyTotal >= 0 ? Color("AppBlue") : .red)
 
+                // 新規トレード（青）
                 Button {
                     showAddTrade = true
                 } label: {
@@ -140,16 +152,19 @@ struct CalendarHomeView: View {
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color.blue)
-                        .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
                 }
+                .buttonStyle(.borderedProminent)
+                .tint(Color("AppBlue"))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
             }
             .padding()
 
             // 新規追加
             .sheet(isPresented: $showAddTrade) {
-                TradeAddView { pair, before, after, date, memo in
+                TradeAddView(
+                    initialBalanceBefore: viewModel.latestTotalBalance,
+                    riskPercent: riskPercent
+                ) { pair, before, after, date, memo in
                     viewModel.addTrade(
                         pair: pair,
                         balanceBefore: before,
@@ -158,32 +173,28 @@ struct CalendarHomeView: View {
                         memo: memo
                     )
                 }
+                .tint(Color("AppBlue"))
             }
 
-            // 編集 + 削除（dynamicMember 回避）
+            // 編集
             .sheet(isPresented: $showEditTrade) {
                 let vm = viewModel
                 if let trade = editingTrade {
                     TradeEditView(
                         trade: trade,
+                        riskPercent: riskPercent,
                         onSave: { trade, pair, before, after, date, memo in
-                            vm.updateTrade(
-                                trade,
-                                pair: pair,
-                                balanceBefore: before,
-                                balanceAfter: after,
-                                date: date,
-                                memo: memo
-                            )
+                            vm.updateTrade(trade, pair: pair, balanceBefore: before, balanceAfter: after, date: date, memo: memo)
                         },
                         onDelete: { trade in
                             vm.deleteTrade(trade)
                         }
                     )
+                    .tint(Color("AppBlue"))
                 }
             }
 
-            // 日次合計の大表示（タップで出す）
+            // 日次合計
             .sheet(isPresented: $showDailySummary) {
                 let total = viewModel.dailyTotal(on: selectedDate)
 
@@ -193,7 +204,7 @@ struct CalendarHomeView: View {
 
                     Text(NumberFormatters.yen(total))
                         .font(.system(size: 44, weight: .bold))
-                        .foregroundStyle(total >= 0 ? .green : .red)
+                        .foregroundStyle(total >= 0 ? Color("AppBlue") : .red)
 
                     Text("日次合計")
                         .foregroundStyle(.secondary)
@@ -202,12 +213,15 @@ struct CalendarHomeView: View {
                         showDailySummary = false
                     }
                     .buttonStyle(.borderedProminent)
+                    .tint(Color("AppBlue"))
                     .padding(.top, 8)
                 }
                 .padding()
                 .presentationDetents([.height(240)])
+                .tint(Color("AppBlue"))
             }
         }
+        .tint(Color("AppBlue"))
     }
 
     // MARK: - Helpers
@@ -245,4 +259,3 @@ struct CalendarHomeView: View {
             + days.map { DayCell(date: $0) }
     }
 }
-
