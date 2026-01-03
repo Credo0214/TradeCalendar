@@ -11,7 +11,7 @@ struct CalendarHomeView: View {
 
     @State private var editingTrade: TradeEntity?
     @State private var showEditTrade = false
-    
+
     @State private var showDailySummary = false
 
     private let calendar = Calendar.current
@@ -29,9 +29,7 @@ struct CalendarHomeView: View {
                 HStack {
                     Button {
                         currentMonth = calendar.date(byAdding: .month, value: -1, to: currentMonth) ?? currentMonth
-                    } label: {
-                        Image(systemName: "chevron.left")
-                    }
+                    } label: { Image(systemName: "chevron.left") }
 
                     Spacer()
 
@@ -42,9 +40,7 @@ struct CalendarHomeView: View {
 
                     Button {
                         currentMonth = calendar.date(byAdding: .month, value: 1, to: currentMonth) ?? currentMonth
-                    } label: {
-                        Image(systemName: "chevron.right")
-                    }
+                    } label: { Image(systemName: "chevron.right") }
                 }
 
                 // 曜日（firstWeekday に合わせる）
@@ -62,29 +58,25 @@ struct CalendarHomeView: View {
                     ForEach(dayCellsInMonth) { cell in
                         if let day = cell.date {
 
-                            let profitForDay: Double = { viewModel.dailyTotal(on: day) }()
+                            let profitForDay: Double = viewModel.dailyTotal(on: day)
 
                             Button {
                                 selectedDate = day
+                                showDailySummary = true
                             } label: {
                                 VStack(spacing: 4) {
                                     Text("\(calendar.component(.day, from: day))")
                                         .font(.headline)
 
                                     if profitForDay != 0 {
-                                        // 見た目を優先するならバッジは数値のみでもOKだが、統一のため¥表示
                                         Text(NumberFormatters.yenCompact(profitForDay))
                                             .font(.caption2)
                                             .foregroundStyle(.white)
-                                            .lineLimit(1)                 // ★ 改行禁止
-                                            .minimumScaleFactor(0.7)      // ★ どうしても長い時は縮小
+                                            .lineLimit(1)            // 改行禁止
+                                            .minimumScaleFactor(0.7) // 長い時は縮小
                                             .padding(.horizontal, 6)
                                             .padding(.vertical, 2)
-                                            .background(
-                                                (profitForDay > 0 ? Color.green : Color.red)
-                                                    .frame(maxWidth: 60)   // ← これ以上広がらない
-                                            )
-
+                                            .background(profitForDay > 0 ? Color.green : Color.red)
                                             .clipShape(Capsule())
                                     }
                                 }
@@ -107,7 +99,7 @@ struct CalendarHomeView: View {
 
                 Divider()
 
-                // 選択日の履歴
+                // 選択日の履歴（リストは編集/削除の入口として残す）
                 VStack(alignment: .leading, spacing: 8) {
                     Text("選択日：\(selectedDate, format: .dateTime.year().month().day())")
                         .font(.headline)
@@ -136,7 +128,7 @@ struct CalendarHomeView: View {
 
                 Spacer()
 
-                // 月合計（¥ + 桁区切り）
+                // 月合計（フル表示：¥ + 桁区切り）
                 Text("当月合計損益：\(NumberFormatters.yen(viewModel.monthlyTotal))")
                     .font(.headline)
                     .foregroundStyle(viewModel.monthlyTotal >= 0 ? .green : .red)
@@ -189,6 +181,31 @@ struct CalendarHomeView: View {
                         }
                     )
                 }
+            }
+
+            // 日次合計の大表示（タップで出す）
+            .sheet(isPresented: $showDailySummary) {
+                let total = viewModel.dailyTotal(on: selectedDate)
+
+                VStack(spacing: 12) {
+                    Text(selectedDate, format: .dateTime.year().month().day())
+                        .font(.headline)
+
+                    Text(NumberFormatters.yen(total))
+                        .font(.system(size: 44, weight: .bold))
+                        .foregroundStyle(total >= 0 ? .green : .red)
+
+                    Text("日次合計")
+                        .foregroundStyle(.secondary)
+
+                    Button("閉じる") {
+                        showDailySummary = false
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .padding(.top, 8)
+                }
+                .padding()
+                .presentationDetents([.height(240)])
             }
         }
     }
