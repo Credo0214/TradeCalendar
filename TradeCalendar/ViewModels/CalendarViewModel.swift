@@ -66,6 +66,38 @@ final class CalendarViewModel: ObservableObject {
             .reduce(0) { $0 + $1.profit }
     }
 
+    struct WinRateSummary {
+        let wins: Int
+        let total: Int
+
+        var rate: Double {
+            guard total > 0 else { return 0 }
+            return Double(wins) / Double(total)
+        }
+    }
+
+    /// 指定月の損益合計
+    func monthlyTotal(for month: Date) -> Double {
+        trades
+            .filter {
+                guard let d = $0.date else { return false }
+                return calendar.isDate(d, equalTo: month, toGranularity: .month)
+            }
+            .reduce(0) { $0 + $1.profit }
+    }
+
+    /// 指定月の勝率
+    func monthlyWinRate(for month: Date) -> WinRateSummary? {
+        let monthTrades = trades.filter {
+            guard let d = $0.date else { return false }
+            return calendar.isDate(d, equalTo: month, toGranularity: .month)
+        }
+
+        guard !monthTrades.isEmpty else { return nil }
+        let wins = monthTrades.filter { $0.profit > 0 }.count
+        return WinRateSummary(wins: wins, total: monthTrades.count)
+    }
+
     /// 直近トレード後の総資金
     var latestTotalBalance: Double {
         trades

@@ -13,8 +13,22 @@ enum NumberFormatters {
         return f
     }()
 
+    // パーセント表示（小数1桁）
+    static let percent: NumberFormatter = {
+        let f = NumberFormatter()
+        f.numberStyle = .percent
+        f.maximumFractionDigits = 1
+        f.minimumFractionDigits = 1
+        f.locale = Locale(identifier: "ja_JP")
+        return f
+    }()
+
     static func yen(_ value: Double) -> String {
         yenCurrency.string(from: NSNumber(value: value)) ?? "¥0"
+    }
+
+    static func percentString(_ value: Double) -> String {
+        percent.string(from: NSNumber(value: value)) ?? "0.0%"
     }
 }
 
