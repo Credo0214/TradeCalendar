@@ -2,12 +2,11 @@ import SwiftUI
 
 struct TradeEditView: View {
 
-    @Environment(\.dismiss) private var dismiss
-
     let trade: TradeEntity
     let riskPercent: Double
     let onSave: (TradeEntity, String, Double, Double, Date, String?) -> Void
     let onDelete: (TradeEntity) -> Void
+    let onCancel: () -> Void
 
     @State private var pair: String = ""
     @State private var balanceBefore: String = ""
@@ -32,11 +31,9 @@ struct TradeEditView: View {
     private var oneR: RiskAmount {
         RiskCalculator.oneR(balance: beforeValue, rate: RiskRate(percent: riskPercent))
     }
-
     private var twoR: TargetAmount {
         RiskCalculator.nR(balance: beforeValue, rate: RiskRate(percent: riskPercent), multiple: 2)
     }
-
     private var threeR: TargetAmount {
         RiskCalculator.nR(balance: beforeValue, rate: RiskRate(percent: riskPercent), multiple: 3)
     }
@@ -112,9 +109,17 @@ struct TradeEditView: View {
             }
             .navigationTitle("編集")
             .toolbar {
+
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
                     Button("Done") { focusedField = nil }
+                }
+
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("キャンセル") {
+                        focusedField = nil
+                        onCancel()
+                    }
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
@@ -122,17 +127,10 @@ struct TradeEditView: View {
                         focusedField = nil
                         guard !pair.isEmpty,
                               let before = Double(balanceBefore),
-                              let after = Double(balanceAfter) else { return }
+                              let after = Double(balanceAfter)
+                        else { return }
 
                         onSave(trade, pair, before, after, date, memo.isEmpty ? nil : memo)
-                        dismiss()
-                    }
-                }
-
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("キャンセル") {
-                        focusedField = nil
-                        dismiss()
                     }
                 }
             }
@@ -145,8 +143,8 @@ struct TradeEditView: View {
             }
             .confirmationDialog("本当に削除しますか？", isPresented: $showDeleteConfirm) {
                 Button("削除", role: .destructive) {
+                    // ✅ ここでは dismiss せず、親が editSelection=nil にして閉じる
                     onDelete(trade)
-                    dismiss()
                 }
                 Button("キャンセル", role: .cancel) {}
             }

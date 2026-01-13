@@ -12,15 +12,17 @@ final class CalendarViewModel: ObservableObject {
     // MARK: - Published State
     @Published private(set) var trades: [TradeEntity] = []
 
+    // 🔴 改善①：日次損益キャッシュ
+    @Published private(set) var dailyTotals: [Date: Double] = [:]
+
     // MARK: - Init
     init(context: NSManagedObjectContext) {
         self.context = context
         fetchTrades()
     }
 
-    // MARK: - Public Fetch API
+    // MARK: - Fetch
 
-    /// 全トレードを取得（date 昇順）
     func fetchTrades() {
         let request: NSFetchRequest<TradeEntity> = TradeEntity.fetchRequest()
         request.sortDescriptors = [
@@ -28,15 +30,18 @@ final class CalendarViewModel: ObservableObject {
         ]
 
         do {
-            trades = try context.fetch(request)
+            let fetched = try context.fetch(request)
+            trades = fetched
+            rebuildDailyTotals(from: fetched)   // ← キャッシュ構築
         } catch {
             trades = []
+            dailyTotals = [:]
         }
     }
 
-    // MARK: - Query / Read
+    // MARK: - Read API（Viewから呼ばれる）
 
-    /// 指定日のトレード一覧
+    /// 指定日のトレード一覧（従来どおり）
     func trades(for date: Date) -> [TradeEntity] {
         trades.filter {
             guard let d = $0.date else { return false }
@@ -44,9 +49,10 @@ final class CalendarViewModel: ObservableObject {
         }
     }
 
-    /// 指定日の損益合計
+    /// 指定日の損益合計（🔴 O(1)）
     func dailyTotal(on date: Date) -> Double {
-        trades(for: date).reduce(0) { $0 + $1.profit }
+        let day = calendar.startOfDay(for: date)
+        return dailyTotals[day] ?? 0
     }
 
     /// 当月損益合計
@@ -60,7 +66,7 @@ final class CalendarViewModel: ObservableObject {
             .reduce(0) { $0 + $1.profit }
     }
 
-    /// 直近トレード後の総資金（なければ 0）
+    /// 直近トレード後の総資金
     var latestTotalBalance: Double {
         trades
             .sorted { ($0.date ?? .distantPast) < ($1.date ?? .distantPast) }
@@ -125,5 +131,19 @@ final class CalendarViewModel: ObservableObject {
         } catch {
             context.rollback()
         }
+    }
+
+    // MARK: - Cache Build（改善①の本体）
+
+    private func rebuildDailyTotals(from trades: [TradeEntity]) {
+        var dict: [Date: Double] = [:]
+
+        for trade in trades {
+            guard let date = trade.date else { continue }
+            let day = calendar.startOfDay(for: date)
+            dict[day, default: 0] += trade.profit
+        }
+
+        dailyTotals = dict
     }
 }
