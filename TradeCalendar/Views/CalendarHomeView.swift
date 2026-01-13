@@ -144,9 +144,24 @@ struct CalendarHomeView: View {
                 
                 Spacer()
                 
-                Text("当月合計損益：\(NumberFormatters.yen(viewModel.monthlyTotal))")
-                    .font(.headline)
-                    .foregroundStyle(viewModel.monthlyTotal >= 0 ? Color("AppBlue") : .red)
+                let monthlyTotal = viewModel.monthlyTotal(for: currentMonth)
+                let winRateSummary = viewModel.monthlyWinRate(for: currentMonth)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("当月合計損益：\(NumberFormatters.yen(monthlyTotal))")
+                        .font(.headline)
+                        .foregroundStyle(monthlyTotal >= 0 ? Color("AppBlue") : .red)
+
+                    if let summary = winRateSummary {
+                        Text("勝率：\(NumberFormatters.percentString(summary.rate))（\(summary.wins)/\(summary.total)）")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("勝率：--（トレードなし）")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
                 
                 Button {
                     showAddTrade = true
