@@ -125,20 +125,26 @@ struct CalendarHomeView: View {
                         Text("トレード履歴はありません")
                             .foregroundStyle(.secondary)
                     } else {
-                        ForEach(dailyTrades) { trade in
-                            HStack {
-                                Text(trade.memo ?? (trade.pair ?? ""))
-                                    .lineLimit(1)
-                                Spacer()
-                                Text(NumberFormatters.yen(trade.profit))
-                                    .foregroundStyle(trade.profit >= 0 ? Color("AppBlue") : .red)
-                            }
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                // ✅ isPresented を使わず selection だけセット
-                                editSelection = TradeSelection(id: trade.objectID)
+                        ScrollView {
+                            LazyVStack(spacing: 8) {
+                                ForEach(dailyTrades) { trade in
+                                    HStack {
+                                        Text(trade.memo ?? (trade.pair ?? ""))
+                                            .lineLimit(1)
+                                        Spacer()
+                                        Text(NumberFormatters.yen(trade.profit))
+                                            .foregroundStyle(trade.profit >= 0 ? Color("AppBlue") : .red)
+                                    }
+                                    .contentShape(Rectangle())
+                                    .onTapGesture {
+                                        // ✅ isPresented を使わず selection だけセット
+                                        editSelection = TradeSelection(id: trade.objectID)
+                                    }
+                                }
                             }
                         }
+                        .frame(maxHeight: 220)
+                        .scrollIndicators(.visible)
                     }
                 }
                 
