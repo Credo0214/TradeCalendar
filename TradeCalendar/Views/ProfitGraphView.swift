@@ -48,7 +48,7 @@ struct ProfitGraphView: View {
         AxisMarks(values: .stride(by: .day)) { _ in
             AxisGridLine()
             AxisTick()
-            AxisValueLabel(format: .dateTime.month().day())
+            AxisValueLabel(format: .dateTime.month(.twoDigits).day(.twoDigits))
         }
     }
 

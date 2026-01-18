@@ -141,7 +141,7 @@ struct TradeEditView: View {
                 date = trade.date ?? Date()
                 memo = trade.memo ?? ""
             }
-            .confirmationDialog("本当に削除しますか？", isPresented: $showDeleteConfirm) {
+            .alert("本当に削除しますか？", isPresented: $showDeleteConfirm) {
                 Button("削除", role: .destructive) {
                     // ✅ ここでは dismiss せず、親が editSelection=nil にして閉じる
                     onDelete(trade)
