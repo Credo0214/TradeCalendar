@@ -148,7 +148,10 @@ struct TradeEditView: View {
                 }
                 Button("キャンセル", role: .cancel) {}
             }
-            .onTapGesture { focusedField = nil }
+            .simultaneousGesture(
+                TapGesture()
+                    .onEnded { focusedField = nil }
+            )
         }
         .tint(Color("AppBlue"))
     }
