@@ -48,7 +48,7 @@ struct ProfitGraphView: View {
         AxisMarks(values: .stride(by: .day)) { _ in
             AxisGridLine()
             AxisTick()
-            AxisValueLabel(format: .dateTime.month().day())
+            AxisValueLabel(format: .dateTime.month(.twoDigits).day(.twoDigits))
         }
     }
 
@@ -110,6 +110,9 @@ struct ProfitGraphView: View {
                         }
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .padding(6)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                        .offset(y: -24)
                     }
                 }
             }
@@ -168,19 +171,29 @@ struct ProfitGraphView: View {
     }
 
     private func formatYen(_ value: Double) -> String {
+        Formatters.yen.string(from: NSNumber(value: value)) ?? "¥0"
+    }
+
+    private func dateLabel(_ date: Date) -> String {
+        Formatters.dateLabel.string(from: date)
+    }
+}
+
+private enum Formatters {
+    static let yen: NumberFormatter = {
         let nf = NumberFormatter()
         nf.numberStyle = .currency
         nf.currencySymbol = "¥"
         nf.maximumFractionDigits = 0
-        return nf.string(from: NSNumber(value: value)) ?? "¥0"
-    }
+        return nf
+    }()
 
-    private func dateLabel(_ date: Date) -> String {
+    static let dateLabel: DateFormatter = {
         let df = DateFormatter()
         df.locale = .current
         df.dateFormat = "M/d"
-        return df.string(from: date)
-    }
+        return df
+    }()
 }
 
 private extension View {
