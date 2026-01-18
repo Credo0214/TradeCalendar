@@ -110,6 +110,9 @@ struct ProfitGraphView: View {
                         }
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .padding(6)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                        .offset(y: -24)
                     }
                 }
             }
