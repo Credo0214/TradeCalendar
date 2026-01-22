@@ -8,7 +8,7 @@ struct TradeAddView: View {
     let riskPercent: Double
     let onSave: (String, Double, Double, Date, String?) -> Void
 
-    @State private var pair: String = ""
+    @State private var pair: String = "XAUUSD"
     @State private var balanceBefore: String = ""
     @State private var balanceAfter: String = ""
     @State private var date: Date = Date()
